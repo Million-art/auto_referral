@@ -8,10 +8,12 @@ module.exports = {
       return false;
     }
 
- 
+    console.log(`Checking membership for user ${userId} in channel ${CHANNEL_ID}`);
+
     try {
       const response = await ctx.telegram.getChatMember(CHANNEL_ID, userId);
-       return ['member', 'administrator', 'creator'].includes(response.status);
+      console.log(`User ${userId} status: ${response.status}`);
+      return ['member', 'administrator', 'creator'].includes(response.status);
     } catch (error) {
       console.error('Member check error:', error);
 

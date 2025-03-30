@@ -12,7 +12,6 @@ const ThisWeekWinner = require("./models/ThisWeekWinner.js");
 const setupAssociations = require('./models/index.js');
 const MonthlyWinner = require("./models/MonthlyWinner.js");
 const { clearMonthEndData, getMonthlyLeadersWithContact } = require("./services/MonthlyFunctions.js");
-const { message } = require("telegraf/filters");
 
 async function initializeDatabase() {
   try {
@@ -48,7 +47,6 @@ bot.start(async (ctx) => {
     if (isReferralIdValid && !isReferredUserAlreadyRegistered) {
       // if valid to refer
       await regUserWithReferralNumber(ctx, referralNumber);
-      console.log(isReferredUserAlreadyRegistered)
       return;
     } else if (isReferredUserAlreadyRegistered) {
       // if referred user is already in the channel
@@ -186,7 +184,7 @@ async function validateUserReferrals(telegramId) {
 }
 
 // Handle contact sharing
-bot.on(message('contact'), async (ctx) => {
+bot.on('contact', async (ctx) => {
   if (!ctx.message?.contact || ctx.message.contact.user_id !== ctx.from?.id) {
     return ctx.reply("Please share your own contact information.");
   }
