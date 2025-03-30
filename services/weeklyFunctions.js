@@ -26,9 +26,6 @@ async function archiveCurrentWeek(transaction) {
   return weekNumber;
 }
 
-async function clearOldWeeklyData() {
-  await ThisWeekWinner.destroy({ truncate: true });
-}
 
 function getCurrentWeek() {
   const now = new Date();
@@ -85,7 +82,6 @@ async function addWinnerToThisWeekTable(ctx, validReferralCount) {
 
 module.exports = {
   archiveCurrentWeek,
-  clearOldWeeklyData,
   addWinnerToThisWeekTable,
   getCurrentWeek,
 };

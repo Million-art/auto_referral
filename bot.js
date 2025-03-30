@@ -1,7 +1,7 @@
 require("dotenv").config();
 const { Telegraf } = require("telegraf");
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const { addWinnerToThisWeekTable,archiveCurrentWeek,clearOldWeeklyData, getCurrentWeek} =  require("./services/weeklyFunctions.js");
+const { addWinnerToThisWeekTable,archiveCurrentWeek} =  require("./services/weeklyFunctions.js");
 const { isUserMemberOfChannel } = require("./helper/channel.js");
 const { isUserAlreadyRegistered, registerUser, countMyWeeklyReferrals, getCurrentLeaderboard } = require("./services/user.js");
 const { regUserWithReferralNumber } = require("./services/referralService.js");
