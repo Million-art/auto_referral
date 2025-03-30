@@ -21,7 +21,11 @@ const Referral = sequelize.define('Referral', {
   tableName: 'referrals',
   indexes: [
     { fields: ['referral_status'] },
-    { fields: ['telegram_id', 'referred_id'] }
+    { fields: ['telegram_id', 'referred_id'] },
+    {
+      fields: ['referred_id'],
+      unique: true,
+    },
   ]
 });
 

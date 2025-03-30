@@ -33,7 +33,7 @@ const setupAssociations = async (sequelize) => {
         targetKey: 'telegram_id'
       });
     // Sync all models with database
-    await sequelize.sync({ alter: true });
+    await sequelize.sync({ alter: false });
     console.log('Database synchronized with models');
     
     return true;

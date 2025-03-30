@@ -12,6 +12,7 @@ const ThisWeekWinner = require("./models/ThisWeekWinner.js");
 const setupAssociations = require('./models/index.js');
 const MonthlyWinner = require("./models/MonthlyWinner.js");
 const { clearMonthEndData, getMonthlyLeadersWithContact } = require("./services/MonthlyFunctions.js");
+const { message } = require("telegraf/filters");
 
 async function initializeDatabase() {
   try {
@@ -72,29 +73,44 @@ bot.on("callback_query", async (ctx) => {
   }
 });
  
- // Admin command to prompt users  to share contact
- bot.command('share_contact', async (ctx) => {
+// Command handler for /share_contact
+bot.command('share_contact', async (ctx) => {
   if (ctx.from.id.toString() !== ADMIN) {
     return ctx.reply("🚫 Only admin can use this command");
   }
 
   try {
+    // Find eligible users who meet the referral criteria
     const eligibleUsers = await Referral.findAll({
-      attributes: [
-        'telegram_id',
-        [sequelize.fn('COUNT', sequelize.col('id')), 'referral_count']
-      ],
+      attributes: ['telegram_id'],
       where: { referral_status: 'new' },
       group: ['telegram_id'],
-      having: sequelize.literal(`COUNT(*) >= ${REFERRAL_COUNT}`) 
+      having: sequelize.literal(`COUNT(*) >= ${REFERRAL_COUNT}`),
     });
 
     if (eligibleUsers.length === 0) {
-      return ctx.reply("No users currently qualify (need ≥2 new referrals)");
+      return ctx.reply(`No users currently qualify (need ≥ ${REFERRAL_COUNT} new referrals)`);
     }
 
-    // Send contact request to each eligible user
+    // Validate referrals for each eligible user before sending contact request
+    const validUsers = [];
     for (const user of eligibleUsers) {
+      try {
+        const isValidUser = await validateUserReferrals(user.telegram_id);
+        if (isValidUser) {
+          validUsers.push(user);
+        }
+      } catch (error) {
+        console.error(`Failed to validate user ${user.telegram_id}:`, error);
+      }
+    }
+
+    if (validUsers.length === 0) {
+      return ctx.reply("No users currently qualify after validation");
+    }
+
+    // Send contact request to valid users
+    for (const user of validUsers) {
       try {
         await ctx.telegram.sendMessage(
           user.telegram_id,
@@ -116,69 +132,80 @@ bot.on("callback_query", async (ctx) => {
       }
     }
 
-    ctx.reply(`✅ Contact requests sent to ${eligibleUsers.length} eligible users`);
-
+    ctx.reply(`✅ Contact requests sent to ${validUsers.length} eligible users`);
   } catch (error) {
     console.error('Error in share_contact:', error);
     ctx.reply("❌ Failed to process command. Please try again.");
   }
 });
 
-// Handle contact sharing (for all users)
-bot.on("contact", async (ctx) => {
-  // Verify the contact belongs to the sender
-  if (ctx.message.contact.user_id !== ctx.from.id) {
+// Validate user's referrals before sending contact request
+
+async function validateUserReferrals(telegramId) {
+  try {
+
+    const referrals = await Referral.findAll({
+      where: { telegram_id: telegramId, referral_status: 'new' },
+    });
+
+    console.log(`Found ${referrals.length} referrals for user ${telegramId}`);
+
+    if (referrals.length === 0) {
+      console.log(`No referrals found for user ${telegramId}`);
+      return false;
+    }
+
+    let validReferralCount = 0;
+
+    for (const referral of referrals) {
+      try {
+        const isMember = await isUserMemberOfChannel(bot, referral.referred_id);
+
+        if (isMember) {
+          validReferralCount++;
+        } else {
+          // Mark non-members as 'end' status
+          await Referral.update(
+            { referral_status: 'end' },
+            { where: { id: referral.id } }
+          );
+        }
+      } catch (error) {
+        console.error(`Error validating referral ${referral.id}:`, error);
+        // Continue processing other referrals even if one fails
+      }
+    }
+
+
+    // Check if the user meets the required referral count
+    return validReferralCount >= REFERRAL_COUNT;
+  } catch (error) {
+    console.error('Error validating user referrals:', error);
+    return false;
+  }
+}
+
+// Handle contact sharing
+bot.on(message('contact'), async (ctx) => {
+  if (!ctx.message?.contact || ctx.message.contact.user_id !== ctx.from?.id) {
     return ctx.reply("Please share your own contact information.");
   }
 
   try {
-    // Get all referrals for this user
-    const referrals = await Referral.findAll({
-      where: { 
-        telegram_id: ctx.from.id,
-        referral_status: 'new'
-      }
-    });
+    // Add user to winners table
+    await addWinnerToThisWeekTable(ctx, REFERRAL_COUNT);
 
-    let validReferralCount = 0;
+    // Notify admin
+    await ctx.telegram.sendMessage(
+      ADMIN,
+      `📞 New contact from ${ctx.from.first_name} (${ctx.message.contact.phone_number})\n` +
+      `They have ${REFERRAL_COUNT} valid referrals.`
+    );
 
-    // Check each referred user's channel membership
-    for (const referral of referrals) {
-      console.log('aaaaaaa',referral.referred_id)
-      const isMember = await isUserMemberOfChannel(ctx, referral.referred_id);
-      
-      if (isMember) {
-        validReferralCount++;
-      } else {
-        // Mark non-members as 'end' status
-        await Referral.update(
-          { referral_status: 'end' },
-          { where: { id: referral.id } }
-        );
-      }
-    }
-
-    if (validReferralCount >= REFERRAL_COUNT) {
-      await ctx.reply(
-        `Thank you, ${ctx.from.first_name}! Admin will contact you soon about your ${validReferralCount} valid referrals.`,
-        { reply_markup: { remove_keyboard: true } }
-      );
-      
-      // Add to winners table
-      await addWinnerToThisWeekTable(ctx, validReferralCount);
-      
-      // Notify admin
-      await ctx.telegram.sendMessage(
-        ADMIN,
-        `📞 New contact from ${ctx.from.first_name} (${ctx.message.contact.phone_number})\n` +
-        `They have ${validReferralCount} valid referrals.`
-      );
-    } else {
-      await ctx.reply(
-        `You only have ${validReferralCount} valid referrals (need ${REFERRAL_COUNT}). Keep sharing your link!`,
-        { reply_markup: { remove_keyboard: true } }
-      );
-    }
+    await ctx.reply(
+      `Thank you, ${ctx.from.first_name}! Admin will contact you soon about your ${REFERRAL_COUNT} valid referrals.`,
+      { reply_markup: { remove_keyboard: true } }
+    );
   } catch (error) {
     console.error('Error processing contact:', error);
     await ctx.reply("An error occurred. Please try again later.");

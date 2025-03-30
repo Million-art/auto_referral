@@ -74,8 +74,9 @@ const regUserWithReferralNumber = async (ctx, referralNum) => {
   }
 };
 
+
 module.exports = {
   getReferralLink,
   sendReferralLink,
-  regUserWithReferralNumber
+  regUserWithReferralNumber,
 };
